@@ -20,22 +20,24 @@
 <script>
 let lastSignal = null;
 
+// Your Alpha Vantage API key
+const API_KEY = "NWXCJZWUB4RVD33L";
+
 async function fetchGoldData() {
   try {
-    // Using a CORS proxy to bypass GitHub Pages restrictions
-    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1h';
-    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+    const res = await fetch(`https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval=60min&apikey=${API_KEY}`);
+    const data = await res.json();
 
-    const res = await fetch(proxy);
-    const rawData = await res.json();
-    const data = JSON.parse(rawData.contents);
+    if (!data["Time Series FX (60min)"]) {
+      document.getElementById('signal').innerText = "Error fetching data";
+      console.error(data);
+      return;
+    }
 
-    const timestamps = data.chart.result[0].timestamp;
-    const prices = data.chart.result[0].indicators.quote[0].close;
+    const timeSeries = data["Time Series FX (60min)"];
+    const labels = Object.keys(timeSeries).reverse();
+    const prices = labels.map(t => parseFloat(timeSeries[t]["4. close"]));
 
-    const labels = timestamps.map(ts => new Date(ts*1000).toLocaleString());
-
-    // Calculate SMA
     function SMA(prices, period) {
       const sma = [];
       for(let i=0;i<prices.length;i++){
@@ -45,10 +47,10 @@ async function fetchGoldData() {
       }
       return sma;
     }
+
     const sma20 = SMA(prices, 20);
     const sma50 = SMA(prices, 50);
 
-    // Calculate RSI
     function RSI(prices, period){
       const rsi = [];
       for(let i=0;i<prices.length;i++){
@@ -64,9 +66,9 @@ async function fetchGoldData() {
       }
       return rsi;
     }
+
     const rsi14 = RSI(prices, 14);
 
-    // Buy/Sell/Hold Logic
     const lastPrice = prices[prices.length-1];
     const lastSMA20 = sma20[sma20.length-1];
     const lastSMA50 = sma50[sma50.length-1];
@@ -80,15 +82,13 @@ async function fetchGoldData() {
 
     document.getElementById('signal').innerText = `Next Move: ${signal}`;
 
-    // Alert on change
     if(signal !== lastSignal && lastSignal !== null){
       alert(`Signal changed! New signal: ${signal}`);
     }
     lastSignal = signal;
 
-    // Draw Chart
     const ctx = document.getElementById('goldChart').getContext('2d');
-    if(window.goldChart) window.goldChart.destroy(); // destroy previous chart
+    if(window.goldChart) window.goldChart.destroy();
 
     window.goldChart = new Chart(ctx,{
       type:'line',
@@ -112,10 +112,7 @@ async function fetchGoldData() {
   }
 }
 
-// Initial run
 fetchGoldData();
-
-// Auto-refresh every 5 minutes
 setInterval(fetchGoldData, 300000);
 </script>
 
