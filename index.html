@@ -22,8 +22,14 @@ let lastSignal = null;
 
 async function fetchGoldData() {
   try {
-    const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1h');
-    const data = await res.json();
+    // Using a CORS proxy to bypass GitHub Pages restrictions
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1h';
+    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+
+    const res = await fetch(proxy);
+    const rawData = await res.json();
+    const data = JSON.parse(rawData.contents);
+
     const timestamps = data.chart.result[0].timestamp;
     const prices = data.chart.result[0].indicators.quote[0].close;
 
