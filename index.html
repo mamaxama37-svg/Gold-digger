@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gold Trade Predictor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; }
+    h1 { color: #b8860b; margin-bottom: 5px; }
+    #signal { font-size: 2em; margin: 20px 0; }
+    canvas { background: white; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>Gold Trade Predictor</h1>
+<div id="signal">Loading signal...</div>
+<canvas id="goldChart" width="900" height="400"></canvas>
+
+<script>
+let lastSignal = null;
+
+async function fetchGoldData() {
+  try {
+    const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1h');
+    const data = await res.json();
+    const timestamps = data.chart.result[0].timestamp;
+    const prices = data.chart.result[0].indicators.quote[0].close;
+
+    const labels = timestamps.map(ts => new Date(ts*1000).toLocaleString());
+
+    // Calculate SMA
+    function SMA(prices, period) {
+      const sma = [];
+      for(let i=0;i<prices.length;i++){
+        if(i<period){ sma.push(null); continue; }
+        const sum = prices.slice(i-period,i).reduce((a,b)=>a+b,0);
+        sma.push(sum/period);
+      }
+      return sma;
+    }
+    const sma20 = SMA(prices, 20);
+    const sma50 = SMA(prices, 50);
+
+    // Calculate RSI
+    function RSI(prices, period){
+      const rsi = [];
+      for(let i=0;i<prices.length;i++){
+        if(i<period){ rsi.push(null); continue; }
+        let gains=0, losses=0;
+        for(let j=i-period+1;j<=i;j++){
+          const change = prices[j]-prices[j-1];
+          if(change>0) gains+=change;
+          else losses-=change;
+        }
+        const rs = gains/(losses||1);
+        rsi.push(100 - 100/(1+rs));
+      }
+      return rsi;
+    }
+    const rsi14 = RSI(prices, 14);
+
+    // Buy/Sell/Hold Logic
+    const lastPrice = prices[prices.length-1];
+    const lastSMA20 = sma20[sma20.length-1];
+    const lastSMA50 = sma50[sma50.length-1];
+    const lastRSI = rsi14[rsi14.length-1];
+    let signal = "HOLD";
+
+    if(lastSMA20 && lastSMA50 && lastRSI){
+      if(lastSMA20 > lastSMA50 && lastRSI < 70) signal = "BUY";
+      else if(lastSMA20 < lastSMA50 && lastRSI > 30) signal = "SELL";
+    }
+
+    document.getElementById('signal').innerText = `Next Move: ${signal}`;
+
+    // Alert on change
+    if(signal !== lastSignal && lastSignal !== null){
+      alert(`Signal changed! New signal: ${signal}`);
+    }
+    lastSignal = signal;
+
+    // Draw Chart
+    const ctx = document.getElementById('goldChart').getContext('2d');
+    if(window.goldChart) window.goldChart.destroy(); // destroy previous chart
+
+    window.goldChart = new Chart(ctx,{
+      type:'line',
+      data:{
+        labels: labels,
+        datasets:[
+          { label: 'Gold Price', data: prices, borderColor:'gold', backgroundColor:'rgba(255,215,0,0.2)', tension:0.1 },
+          { label: 'SMA20', data: sma20, borderColor:'orange', borderDash:[5,5], tension:0.1 },
+          { label: 'SMA50', data: sma50, borderColor:'red', borderDash:[5,5], tension:0.1 }
+        ]
+      },
+      options:{
+        responsive:true,
+        plugins:{ legend:{ display:true } }
+      }
+    });
+
+  } catch(err){
+    document.getElementById('signal').innerText = "Error fetching data";
+    console.error(err);
+  }
+}
+
+// Initial run
+fetchGoldData();
+
+// Auto-refresh every 5 minutes
+setInterval(fetchGoldData, 300000);
+</script>
+
+</body>
+</html>
